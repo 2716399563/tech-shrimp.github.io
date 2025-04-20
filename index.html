@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>Meta分析森林图</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        /* 基础样式 */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+        }
+
+        /* 导航栏样式 */
+        .navbar {
+            background-color: #2c3e50;
+            color: white;
+            padding: 15px 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .navbar h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+
+        /* 主容器 */
+        .container {
+            display: flex;
+            min-height: calc(100vh - 60px);
+            position: relative;
+        }
+
+        /* 改进的侧边栏样式 */
+        .sidebar {
+            position: relative;
+            min-width: 200px;  /* 收起时的宽度 */
+            max-width: 800px;
+            width: 600px;
+            background-color: white;
+            padding: 20px;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            overflow-y: auto;
+            height: calc(100vh - 60px);
+            flex-shrink: 0;
+            transition: width 0.3s ease;
+        }
+
+        /* 收起状态的样式 */
+        .sidebar.collapsed {
+            width: 200px;
+            padding: 10px;
+        }
+
+        .sidebar.collapsed .collapse-button .arrow {
+            transform: rotate(180deg);
+        }
+
+        /* 收起状态下隐藏的元素 */
+        .sidebar.collapsed .data-table,
+        .sidebar.collapsed .settings-section,
+        .sidebar.collapsed .button-group {
+            display: none;
+        }
+
+        /* 收起状态下显示的简略信息 */
+        .sidebar.collapsed .collapsed-info {
+            display: block;
+        }
+
+        .collapsed-info {
+            display: none;
+            text-align: center;
+            padding: 10px;
+        }
+
+        /* 数据输入区域样式 */
+        .data-input-section {
+            margin-bottom: 30px;
+        }
+
+        .section-title {
+            color: #2c3e50;
+            font-size: 16px;
+            font-weight: bold;
+            padding: 10px 0;
+            border-bottom: 2px solid #2c3e50;
+            margin-bottom: 15px;
+        }
+
+        /* 按钮组样式 */
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .button {
+            flex: 1;
+            padding: 8px;
+            background-color: #2c3e50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+
+        .button:hover {
+            background-color: #34495e;
+        }
+
+        .button.secondary {
+            background-color: #95a5a6;
+        }
+
+        .button.secondary:hover {
+            background-color: #7f8c8d;
+        }
+
+        /* 数据表格样式 */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            font-size: 14px;
+        }
+
+        .data-table th {
+            background-color: #f8f9fa;
+            padding: 8px;
+            text-align: left;
+            border-bottom: 2px solid #2c3e50;
+            font-weight: bold;
+        }
+
+        .data-table td {
+            padding: 8px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .data-table input {
+            width: 60px;
+            padding: 4px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+        }
+
+        .data-table input[type="text"] {
+            width: 120px;
+        }
+
+        /* 设置区域样式 */
+        .settings-section {
+            margin-bottom: 30px;
+        }
+
+        .settings-group {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+
+        .settings-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #2c3e50;
+        }
+
+        /* 文件上传区域样式 */
+        .file-upload {
+            border: 2px dashed #ddd;
+            padding: 15px;
+            text-align: center;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            transition: border-color 0.3s;
+        }
+
+        .file-upload:hover {
+            border-color: #2c3e50;
+        }
+
+        .file-upload p {
+            margin: 10px 0;
+            color: #666;
+        }
+
+        /* 主要内容区域样式 */
+        .main-content {
+            flex: 1;
+            padding: 20px;
+            background-color: white;
+            margin: 20px;
+            border-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            overflow-y: auto;
+            min-width: 400px;  /* 主内容区域最小宽度 */
+        }
+
+        /* 森林图样式 */
+        .forest-plot {
+            margin-top: 20px;
+        }
+
+        .forest-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        .forest-table th, .forest-table td {
+            padding: 8px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .forest-table th {
+            background-color: #f8f9fa;
+            border-bottom: 2px solid #2c3e50;
+        }
+
+        /* 统计信息面板 */
+        .stats-panel {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+
+        /* 加载动画 */
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        /* 提示信息样式 */
+        .alert {
+            padding: 15px;
+            margin-bottom: 20px;
+            border: 1px solid transparent;
+            border-radius: 4px;
+        }
+
+        .alert-info {
+            background-color: #d9edf7;
+            border-color: #bce8f1;
+            color: #31708f;
+        }
+
+        .alert-warning {
+            background-color: #fcf8e3;
+            border-color: #faebcc;
+            color: #8a6d3b;
+        }
+
+        /* 添加表格输入样式 */
+        .data-input-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+        }
+
+        .data-input-table th, .data-input-table td {
+            padding: 8px;
+            border: 1px solid #ddd;
+        }
+
+        .data-input-table input {
+            width: 60px;
+            padding: 4px;
+        }
+
+        /* 拖动时添加的样式 */
+        .resizing {
+            cursor: col-resize;
+            user-select: none;
+        }
+
+        /* 添加收起按钮样式 */
+        .collapse-button {
+            position: absolute;
+            right: -15px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 30px;
+            height: 30px;
+            background-color: #2c3e50;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 1000;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            transition: background-color 0.3s;
+        }
+
+        .collapse-button:hover {
+            background-color: #34495e;
+        }
+
+        .collapse-button .arrow {
+            color: white;
+            font-size: 12px;
+            transition: transform 0.3s;
+        }
+
+        /* 确保resizer在收起状态下仍然可用 */
+        .resizer {
+            width: 8px;
+            background-color: #f0f0f0;
+            cursor: col-resize;
+            margin: 0 -4px;
+            z-index: 100;
+            position: relative;
+        }
+
+        .resizer:hover, .resizer.resizing {
+            background-color: #2c3e50;
+        }
+
+        /* 添加样式以确保图表容器正确响应 */
+        #forest-plot-container {
+            width: 100%;
+            height: auto;
+            overflow: auto;
+        }
+
+        .sidebar.collapsed .collapse-button {
+            right: -15px;
+        }
+
+        .sidebar.collapsed {
+            width: 200px !important;
+        }
+
+        .main-content {
+            flex: 1;
+            min-width: 0;  /* 允许内容区域收缩 */
+            overflow: auto;
+        }
+
+        .container {
+            display: flex;
+            width: 100%;
+            height: calc(100vh - 60px);
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+    <!-- 导航栏 -->
+    <div class="navbar">
+        <h1>Meta分析森林图生成器</h1>
+    </div>
+
+    <!-- 主容器 -->
+    <div class="container">
+        <div class="sidebar" id="sidebar">
+            <div class="collapse-button" id="collapseButton">
+                <span class="arrow">◀</span>
+            </div>
+            <!-- 数据输入部分 -->
+            <div class="data-input-section">
+                <div class="section-title">数据输入</div>
+                
+                <!-- 文件操作按钮组 -->
+                <div class="button-group">
+                    <button class="button" id="useExample">使用示例</button>
+                    <button class="button secondary" id="downloadExample">下载模板</button>
+                </div>
+
+                <!-- 文件上传区域 -->
+                <div class="file-upload">
+                    <input type="file" id="fileInput" accept=".csv">
+                    <p>拖拽CSV文件到此处或点击选择文件</p>
+                </div>
+
+                <!-- 数据表格 -->
+                <div class="button-group">
+                    <button class="button" id="addRow">添加研究</button>
+                    <button class="button" id="generatePlot">生成森林图</button>
+                </div>
+                
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>研究名称</th>
+                            <th>实验组<br>事件数</th>
+                            <th>实验组<br>总数</th>
+                            <th>对照组<br>事件数</th>
+                            <th>对照组<br>总数</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dataInputBody">
+                        <!-- 数据行将通过JavaScript动态添加 -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 图表设置部分 -->
+            <div class="settings-section">
+                <div class="section-title">图表设置</div>
+                <div class="settings-group">
+                    <label>
+                        <input type="checkbox" id="showWeight" checked>
+                        显示权重
+                    </label>
+                    <label>
+                        <input type="checkbox" id="showCI" checked>
+                        显示置信区间
+                    </label>
+                    <label>
+                        <input type="checkbox" id="showHeterogeneity" checked>
+                        显示异质性统计
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- 拖动分隔线 -->
+        <div class="resizer" id="resizer"></div>
+
+        <!-- 主要内容区域 -->
+        <div class="main-content" id="main-content">
+            <!-- 加载动画 -->
+            <div class="loading">
+                正在生成森林图...
+            </div>
+
+            <!-- 提示信息 -->
+            <div class="alert alert-info">
+                请在左侧选择数据文件或使用示例数据生成森林图。
+            </div>
+
+            <!-- 森林图容器 -->
+            <div id="forest-plot-container"></div>
+
+            <!-- 统计信息面板 -->
+            <div class="stats-panel">
+                <h3>统计信息</h3>
+                <div id="meta-stats"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 示例数据格式
+        const exampleData = [
+            {
+                study: "研究1",
+                experimental: { events: 15, total: 100 },
+                control: { events: 10, total: 100 }
+            },
+            {
+                study: "研究2",
+                experimental: { events: 25, total: 150 },
+                control: { events: 15, total: 150 }
+            }
+        ];
+
+        // 全局设置对象
+        const plotSettings = {
+            showWeight: true,
+            showCI: true,
+            showHeterogeneity: true
+        };
+
+        // 更新设置监听器
+        document.getElementById('showWeight').addEventListener('change', function(e) {
+            plotSettings.showWeight = e.target.checked;
+            // 如果已有数据，重新绘制图表
+            if (currentData.length > 0) {
+                drawForestPlot(currentData);
+            }
+        });
+
+        document.getElementById('showCI').addEventListener('change', function(e) {
+            plotSettings.showCI = e.target.checked;
+            if (currentData.length > 0) {
+                drawForestPlot(currentData);
+            }
+        });
+
+        document.getElementById('showHeterogeneity').addEventListener('change', function(e) {
+            plotSettings.showHeterogeneity = e.target.checked;
+            if (currentData.length > 0) {
+                drawForestPlot(currentData);
+            }
+        });
+
+        // 存储当前数据的全局变量
+        let currentData = [];
+
+        // 添加新的数据行
+        function addDataRow(data = null) {
+            const tbody = document.getElementById('dataInputBody');
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td><input type="text" class="study-name" value="${data ? data.study : ''}" placeholder="输入研究名称"></td>
+                <td><input type="number" class="exp-events" value="${data ? data.experimental.events : ''}" min="0"></td>
+                <td><input type="number" class="exp-total" value="${data ? data.experimental.total : ''}" min="0"></td>
+                <td><input type="number" class="ctrl-events" value="${data ? data.control.events : ''}" min="0"></td>
+                <td><input type="number" class="ctrl-total" value="${data ? data.control.total : ''}" min="0"></td>
+                <td><button class="delete-btn" onclick="this.parentElement.parentElement.remove()">删除</button></td>
+            `;
+            tbody.appendChild(row);
+            updateCollapsedInfo();
+        }
+
+        // 计算效应值和置信区间
+        function calculateEffectSize(experimental, control) {
+            // 计算风险比（Risk Ratio）
+            const rr = (experimental.events / experimental.total) / (control.events / control.total);
+            
+            // 计算风险比的标准误
+            const se = Math.sqrt(
+                (1/experimental.events - 1/experimental.total) + 
+                (1/control.events - 1/control.total)
+            );
+            
+            // 计算95%置信区间
+            const ci_lower = Math.exp(Math.log(rr) - 1.96 * se);
+            const ci_upper = Math.exp(Math.log(rr) + 1.96 * se);
+            
+            // 计算权重（使用逆方差法）
+            const weight = 1 / (se * se);
+            
+            return {
+                effect: rr,
+                ci_lower: ci_lower,
+                ci_upper: ci_upper,
+                se: se,
+                weight: weight
+            };
+        }
+
+        // 收集表格数据并生成森林图
+        function generateForestPlot() {
+            const rows = document.querySelectorAll('#dataInputBody tr');
+            const data = Array.from(rows).map(row => {
+                const study = row.querySelector('.study-name').value;
+                const expEvents = parseInt(row.querySelector('.exp-events').value);
+                const expTotal = parseInt(row.querySelector('.exp-total').value);
+                const ctrlEvents = parseInt(row.querySelector('.ctrl-events').value);
+                const ctrlTotal = parseInt(row.querySelector('.ctrl-total').value);
+
+                const experimental = { events: expEvents, total: expTotal };
+                const control = { events: ctrlEvents, total: ctrlTotal };
+                
+                // 计算效应值和置信区间
+                const stats = calculateEffectSize(experimental, control);
+
+                return {
+                    study: study,
+                    experimental: experimental,
+                    control: control,
+                    effect: stats.effect,
+                    ci_lower: stats.ci_lower,
+                    ci_upper: stats.ci_upper,
+                    se: stats.se,
+                    weight: stats.weight
+                };
+            });
+
+            drawForestPlot(data);
+        }
+
+        // 下载示例数据的CSV格式
+        function downloadExampleData() {
+            const csvContent = `研究,实验组事件数,实验组总数,对照组事件数,对照组总数
+研究1,15,100,10,100
+研究2,25,150,15,150
+研究3,30,200,20,200`;
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", "forest_plot_example.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // 事件监听器
+        document.getElementById('addRow').addEventListener('click', () => addDataRow());
+        document.getElementById('generatePlot').addEventListener('click', generateForestPlot);
+        document.getElementById('useExample').addEventListener('click', () => {
+            document.getElementById('dataInputBody').innerHTML = '';
+            exampleData.forEach(data => addDataRow(data));
+        });
+        document.getElementById('downloadExample').addEventListener('click', downloadExampleData);
+
+        // 文件上传处理
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    const csvData = event.target.result.split('\n')
+                        .slice(1) // 跳过表头
+                        .filter(line => line.trim())
+                        .map(line => {
+                            const [study, expEvents, expTotal, ctrlEvents, ctrlTotal] = line.split(',');
+                            return {
+                                study: study,
+                                experimental: {
+                                    events: parseInt(expEvents),
+                                    total: parseInt(expTotal)
+                                },
+                                control: {
+                                    events: parseInt(ctrlEvents),
+                                    total: parseInt(ctrlTotal)
+                                }
+                            };
+                        });
+                    
+                    document.getElementById('dataInputBody').innerHTML = '';
+                    csvData.forEach(data => addDataRow(data));
+                };
+                reader.readAsText(file);
+            }
+        });
+
+        // 修改后的收缩功能代码
+        function initializeSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const collapseButton = document.getElementById('collapseButton');
+            const arrow = collapseButton.querySelector('.arrow');
+            let isCollapsed = false;
+            let originalWidth = '600px';
+
+            function toggleSidebar() {
+                if (!isCollapsed) {
+                    // 收起侧边栏
+                    originalWidth = sidebar.style.width || '600px';
+                    sidebar.classList.add('collapsed');
+                    arrow.style.transform = 'rotate(180deg)';
+                    sidebar.style.width = '200px';
+                    isCollapsed = true;
+                } else {
+                    // 展开侧边栏
+                    sidebar.classList.remove('collapsed');
+                    sidebar.style.width = originalWidth;
+                    arrow.style.transform = 'rotate(0deg)';
+                    isCollapsed = false;
+                }
+                
+                // 触发窗口resize事件，确保图表重新调整大小
+                window.dispatchEvent(new Event('resize'));
+            }
+
+            collapseButton.addEventListener('click', toggleSidebar);
+
+            // 返回toggle函数，以便在其他地方调用
+            return toggleSidebar;
+        }
+
+        // 在页面加载时初始化
+        let toggleSidebar;
+        document.addEventListener('DOMContentLoaded', function() {
+            toggleSidebar = initializeSidebar();
+        });
+
+        // 修改森林图绘制函数，添加响应式调整
+        function drawForestPlot(data, axisSettings = {}) {
+            // 首先验证数据
+            if (!data || data.length === 0) {
+                console.error("No data provided for forest plot");
+                return;
+            }
+
+            // 数据验证和预处理
+            const validData = data.filter(d => {
+                // 检查必要的数据字段是否存在且有效
+                const isValid = d.study && 
+                    d.experimental && d.experimental.events >= 0 && d.experimental.total > 0 &&
+                    d.control && d.control.events >= 0 && d.control.total > 0;
+                
+                if (!isValid) {
+                    console.warn("Invalid data row:", d);
+                }
+                return isValid;
+            });
+
+            if (validData.length === 0) {
+                console.error("No valid data after filtering");
+                return;
+            }
+
+            // 处理数据并计算统计量
+            const processedData = validData.map(d => {
+                // 添加小值以避免除零错误
+                const expEvents = d.experimental.events + 0.5;
+                const expTotal = d.experimental.total + 1;
+                const ctrlEvents = d.control.events + 0.5;
+                const ctrlTotal = d.control.total + 1;
+
+                const expRate = expEvents / expTotal;
+                const ctrlRate = ctrlEvents / ctrlTotal;
+                const rr = expRate / ctrlRate;
+                const seLogRR = Math.sqrt(
+                    (1/expEvents - 1/expTotal) + 
+                    (1/ctrlEvents - 1/ctrlTotal)
+                );
+                
+                return {
+                    ...d,
+                    effect: rr,
+                    logEffect: Math.log(rr),
+                    ci_lower: Math.exp(Math.log(rr) - 1.96 * seLogRR),
+                    ci_upper: Math.exp(Math.log(rr) + 1.96 * seLogRR),
+                    se: seLogRR,
+                    weight: 1 / (seLogRR * seLogRR)
+                };
+            });
+
+            // 清除现有图表
+            const container = d3.select("#forest-plot-container");
+            container.html("");
+
+            // 计算合适的边距和尺寸
+            const margin = {
+                top: 40,
+                right: 150,
+                bottom: 80,
+                left: 350
+            };
+
+            // 计算每行文本的最大宽度
+            const maxStudyNameWidth = Math.max(...data.map(d => d.study.length)) * 8;
+            const maxGroupDataWidth = Math.max(...data.map(d => 
+                Math.max(
+                    `${d.experimental.events}/${d.experimental.total}`.length,
+                    `${d.control.events}/${d.control.total}`.length
+                )
+            )) * 8;
+
+            // 调整左边距以适应最长的文本
+            margin.left = Math.max(350, maxStudyNameWidth + maxGroupDataWidth + 100);
+
+            // 计算合适的行高和总高度
+            const rowHeight = 40;  // 每行的基础高度
+            const minHeight = 400; // 最小高度
+            const contentHeight = data.length * rowHeight;
+            const totalHeight = Math.max(minHeight, contentHeight + margin.top + margin.bottom);
+
+            // 计算合适的总宽度
+            const minWidth = 800;  // 最小宽度
+            const containerWidth = container.node().getBoundingClientRect().width;
+            const totalWidth = Math.max(minWidth, containerWidth);
+            const width = totalWidth - margin.left - margin.right;
+
+            // 创建自适应的SVG容器
+            const svg = container.append("svg")
+                .attr("width", "100%")
+                .attr("height", totalHeight)
+                .attr("viewBox", `0 0 ${totalWidth} ${totalHeight}`)
+                .attr("preserveAspectRatio", "xMinYMin meet")
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+
+            // 创建比例尺
+            const y = d3.scaleBand()
+                .domain(processedData.map(d => d.study))
+                .range([0, contentHeight])
+                .padding(0.2);
+
+            // 计算x轴范围
+            const xMin = d3.min(processedData, d => Math.min(d.ci_lower, 0.1));
+            const xMax = d3.max(processedData, d => Math.max(d.ci_upper, 10));
+
+            // 创建对数比例尺
+            const x = d3.scaleLog()
+                .domain([xMin, xMax])
+                .range([0, width]);
+
+            // 计算合适的刻度值
+            function calculateTicks(min, max, tickCount) {
+                const logMin = Math.log10(min);
+                const logMax = Math.log10(max);
+                const logRange = logMax - logMin;
+                
+                // 如果范围跨度较大，使用对数刻度
+                if (logRange >= 2) {
+                    return d3.ticks(Math.pow(10, Math.floor(logMin)), Math.pow(10, Math.ceil(logMax)), tickCount);
+                } else {
+                    // 如果范围较小，使用线性刻度
+                    const step = (max - min) / (tickCount - 1);
+                    return d3.range(tickCount).map(i => min + step * i);
+                }
+            }
+
+            // 获取刻度值
+            const ticks = calculateTicks(xMin, xMax, axisSettings.tickCount || 5);
+
+            // 创建格式化函数
+            function createTickFormatter(format, decimalPlaces) {
+                switch(format) {
+                    case 'percent':
+                        return d => (d * 100).toFixed(decimalPlaces) + '%';
+                    case 'scientific':
+                        return d => d.toExponential(decimalPlaces);
+                    default:
+                        // 根据数值大小动态调整小数位数
+                        return d => {
+                            if (d < 0.01) return d.toExponential(decimalPlaces);
+                            if (d < 0.1) return d.toFixed(decimalPlaces + 1);
+                            if (d < 1) return d.toFixed(decimalPlaces);
+                            if (d >= 10) return d.toFixed(Math.max(0, decimalPlaces - 1));
+                            return d.toFixed(decimalPlaces);
+                        };
+                }
+            }
+
+            // 创建坐标轴
+            const xAxis = d3.axisBottom(x)
+                .tickValues(ticks)
+                .tickFormat(createTickFormatter(
+                    axisSettings.tickFormat || 'decimal',
+                    axisSettings.decimalPlaces || 2
+                ));
+
+            // 添加X轴
+            const xAxisGroup = svg.append("g")
+                .attr("class", "x-axis")
+                .attr("transform", `translate(0,${contentHeight})`)
+                .call(xAxis);
+
+            // 调整刻度标签的样式和位置
+            xAxisGroup.selectAll(".tick text")
+                .attr("y", 10)
+                .attr("dy", ".71em")
+                .style("text-anchor", "middle")
+                .style("font-size", "10px")
+                .each(function(d, i) {
+                    // 检查与相邻标签的重叠
+                    const thisLabel = this;
+                    const thisBox = thisLabel.getBBox();
+                    const prevLabel = xAxisGroup.selectAll(".tick text").nodes()[i-1];
+                    
+                    if (prevLabel) {
+                        const prevBox = prevLabel.getBBox();
+                        const thisX = x(d);
+                        const prevX = x(ticks[i-1]);
+                        
+                        // 如果标签重叠，调整位置或隐藏
+                        if (Math.abs(thisX - prevX) < (thisBox.width + prevBox.width) / 2) {
+                            // 偶数标签向下偏移
+                            if (i % 2 === 0) {
+                                d3.select(thisLabel)
+                                    .attr("y", 20)
+                                    .attr("dy", ".71em");
+                            }
+                        }
+                    }
+                });
+
+            // 添加网格线
+            if (axisSettings.showGrid !== false) {
+                svg.append("g")
+                    .attr("class", "grid")
+                    .attr("transform", `translate(0,${contentHeight})`)
+                    .call(d3.axisBottom(x)
+                        .tickValues(ticks)
+                        .tickSize(-contentHeight)
+                        .tickFormat("")
+                    )
+                    .style("stroke-dasharray", "2,2")
+                    .style("stroke-opacity", 0.2);
+            }
+
+            // 添加CSS样式
+            const styleSheet = document.createElement("style");
+            styleSheet.textContent = `
+                .x-axis path,
+                .x-axis line {
+                    stroke: #000;
+                    shape-rendering: crispEdges;
+                }
+                .x-axis text {
+                    font-family: sans-serif;
+                }
+                .grid path {
+                    stroke-width: 0;
+                }
+                .grid line {
+                    stroke: #e0e0e0;
+                }
+            `;
+            document.head.appendChild(styleSheet);
+
+            // 更新绘制研究数据的部分
+            processedData.forEach((d, i) => {
+                // 确保所有数值都是有效的
+                if (isNaN(d.effect) || isNaN(d.ci_lower) || isNaN(d.ci_upper)) {
+                    console.warn("Invalid effect sizes for study:", d.study);
+                    return;
+                }
+
+                // 研究名称
+                svg.append("text")
+                    .attr("x", -10)
+                    .attr("y", y(d.study) + y.bandwidth()/2)
+                    .attr("text-anchor", "end")
+                    .attr("dominant-baseline", "middle")
+                    .attr("font-size", "12px")
+                    .text(d.study);
+
+                // 实验组数据
+                svg.append("text")
+                    .attr("x", -margin.left + 30)
+                    .attr("y", y(d.study) + y.bandwidth()/2)
+                    .attr("text-anchor", "start")
+                    .attr("dominant-baseline", "middle")
+                    .attr("font-size", "12px")
+                    .text(`${d.experimental.events}/${d.experimental.total}`);
+
+                // 对照组数据
+                svg.append("text")
+                    .attr("x", -margin.left + 150)
+                    .attr("y", y(d.study) + y.bandwidth()/2)
+                    .attr("text-anchor", "start")
+                    .attr("dominant-baseline", "middle")
+                    .attr("font-size", "12px")
+                    .text(`${d.control.events}/${d.control.total}`);
+
+                // 置信区间线
+                if (plotSettings.showCI) {
+                    svg.append("line")
+                        .attr("class", "confidence-interval")
+                        .attr("x1", x(d.ci_lower))
+                        .attr("x2", x(d.ci_upper))
+                        .attr("y1", y(d.study) + y.bandwidth()/2)
+                        .attr("y2", y(d.study) + y.bandwidth()/2)
+                        .style("stroke", "black")
+                        .style("stroke-width", 1);
+                }
+
+                // 效应值方块
+                const squareSize = plotSettings.showWeight ? Math.sqrt(d.weight) * 2 : 8;
+                svg.append("rect")
+                    .attr("class", "study-square")
+                    .attr("x", x(d.effect) - squareSize/2)
+                    .attr("y", y(d.study) + y.bandwidth()/2 - squareSize/2)
+                    .attr("width", squareSize)
+                    .attr("height", squareSize)
+                    .style("fill", "#d32f2f");
+
+                // 添加效应值文本
+                svg.append("text")
+                    .attr("x", width + 10)
+                    .attr("y", y(d.study) + y.bandwidth()/2)
+                    .attr("dominant-baseline", "middle")
+                    .attr("font-size", "12px")
+                    .text(`${d.effect.toFixed(2)} (${d.ci_lower.toFixed(2)}, ${d.ci_upper.toFixed(2)})`);
+            });
+
+            // 添加列标题
+            svg.append("text")
+                .attr("x", -margin.left + 30)
+                .attr("y", -20)
+                .attr("text-anchor", "start")
+                .attr("font-size", "12px")
+                .attr("font-weight", "bold")
+                .text("实验组 (n/N)");
+
+            svg.append("text")
+                .attr("x", -margin.left + 150)
+                .attr("y", -20)
+                .attr("text-anchor", "start")
+                .attr("font-size", "12px")
+                .attr("font-weight", "bold")
+                .text("对照组 (n/N)");
+
+            // 计算总效应
+            const totalWeight = d3.sum(processedData, d => d.weight);
+            const weightedEffect = d3.sum(processedData, d => d.logEffect * d.weight) / totalWeight;
+            const totalSE = Math.sqrt(1 / totalWeight);
+            const totalEffect = Math.exp(weightedEffect);
+            const totalCI_lower = Math.exp(weightedEffect - 1.96 * totalSE);
+            const totalCI_upper = Math.exp(weightedEffect + 1.96 * totalSE);
+
+            // 添加总效应钻石
+            const diamondHeight = 15;
+            const diamondPoints = [
+                [x(totalEffect), contentHeight + 20],
+                [x(totalCI_upper), contentHeight + 20 + diamondHeight/2],
+                [x(totalEffect), contentHeight + 20 + diamondHeight],
+                [x(totalCI_lower), contentHeight + 20 + diamondHeight/2]
+            ];
+
+            svg.append("polygon")
+                .attr("points", diamondPoints.map(p => p.join(",")).join(" "))
+                .style("fill", "black");
+
+            // 添加X轴标题
+            svg.append("text")
+                .attr("x", width/2)
+                .attr("y", contentHeight + 60)
+                .attr("text-anchor", "middle")
+                .attr("font-size", "12px")
+                .text("Risk Ratio (95% CI)");
+
+            // 添加异质性统计
+            if (plotSettings.showHeterogeneity) {
+                const Q = calculateHeterogeneity(processedData);
+                const I2 = calculateI2(Q, processedData.length);
+                
+                svg.append("text")
+                    .attr("x", 0)
+                    .attr("y", contentHeight + 40)
+                    .attr("text-anchor", "start")
+                    .attr("font-size", "12px")
+                    .text(`Heterogeneity: I² = ${I2.toFixed(1)}%, Q = ${Q.toFixed(2)}, df = ${processedData.length - 1}`);
+            }
+
+            // 添加调试信息
+            console.log("Processed data:", processedData);
+            console.log("Scale domain:", x.domain());
+            console.log("Scale range:", x.range());
+
+            // 添加窗口大小改变的监听器
+            function resizeChart() {
+                const newWidth = container.node().getBoundingClientRect().width;
+                svg.attr("width", newWidth)
+                   .attr("viewBox", `0 0 ${Math.max(minWidth, newWidth)} ${totalHeight}`);
+            }
+
+            window.addEventListener('resize', resizeChart);
+        }
+
+        // 计算异质性统计量
+        function calculateHeterogeneity(data) {
+            const totalWeight = d3.sum(data, d => d.weight);
+            const weightedEffect = d3.sum(data, d => d.effect * d.weight) / totalWeight;
+            
+            return d3.sum(data, d => d.weight * Math.pow(d.effect - weightedEffect, 2));
+        }
+
+        // 计算I²统计量
+        function calculateI2(Q, df) {
+            return Math.max(0, (Q - (df - 1)) / Q * 100);
+        }
+
+        // 添加数据验证函数
+        function validateStudyData(data) {
+            if (!Array.isArray(data)) {
+                console.error("Data must be an array");
+                return false;
+            }
+
+            return data.every(d => {
+                const isValid = d.study && 
+                    d.experimental && 
+                    typeof d.experimental.events === 'number' &&
+                    typeof d.experimental.total === 'number' &&
+                    d.control &&
+                    typeof d.control.events === 'number' &&
+                    typeof d.control.total === 'number';
+
+                if (!isValid) {
+                    console.error("Invalid data format for study:", d);
+                }
+
+                return isValid;
+            });
+        }
+
+        // 在添加新数据时使用这个函数
+        function addStudyData(newData) {
+            if (!validateStudyData([newData])) {
+                alert("数据格式无效，请检查输入");
+                return;
+            }
+            
+            currentData.push(newData);
+            drawForestPlot(currentData);
+        }
+
+        // 添加简略信息显示
+        function updateCollapsedInfo() {
+            const rows = document.querySelectorAll('#dataInputBody tr');
+            const studyCount = rows.length;
+            
+            // 创建或更新简略信息
+            let collapsedInfo = document.querySelector('.collapsed-info');
+            if (!collapsedInfo) {
+                collapsedInfo = document.createElement('div');
+                collapsedInfo.className = 'collapsed-info';
+                document.querySelector('.sidebar').appendChild(collapsedInfo);
+            }
+            
+            collapsedInfo.innerHTML = `
+                <p><strong>研究数量：</strong> ${studyCount}</p>
+                <p>点击展开查看详细信息</p>
+            `;
+        }
+
+        // 在删除行时也更新简略信息
+        document.addEventListener('click', function(e) {
+            if (e.target.classList.contains('delete-btn')) {
+                setTimeout(updateCollapsedInfo, 0);
+            }
+        });
+
+        // 更新坐标轴控制面板中的刻度数量选项
+        function updateAxisControls() {
+            const tickCountInput = document.getElementById('tickCount');
+            tickCountInput.addEventListener('change', function() {
+                const value = parseInt(this.value);
+                if (value < 3) this.value = 3;
+                if (value > 10) this.value = 10;
+                updateAxis();
+            });
+        }
+    </script>
+</body>
+</html> 
